@@ -15,7 +15,7 @@ class Weather:
         self.city = city
         self.need_unit = need_unit
 
-    def __get_json(self):
+    def __get_json(self) -> httpx._models.Response.json:
         # Формирование URL на основе параметров
         unit = UNITS[self.need_unit][0]
         url = API_URL + \
