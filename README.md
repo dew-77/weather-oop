@@ -11,18 +11,19 @@
 
 Пример записей в файле:
 
-```plain
-Москва_17-03-2024 23:35:57_2.38°C-1016hPa-1.98м/с
-Анкара_17-03-2024 23:36:03_7.89°C-1015hPa-1.28м/с
-[error] 17-03-2024 23:36:09: Incorrect city name.
+```bash
+23-03-2024 14:54:33 Moscow 277.46°C-1000hPa-5.99м/с
+23-03-2024 14:54:25 Incorrect city name 
+23-03-2024 14:54:25 Service currently unavailable
 ```
 
 ## Технологии
 
 - Python 3.11
 - Библиотеки httpx, datetime
+- pydantic
 
-В качестве внешнего сервиса погоды используется API [openweathermap.org](https://openweathermap.org/current).
+В качестве внешнего сервиса погоды рекомендуется использовать API [openweathermap.org](https://openweathermap.org/current).
 
 ## Установка и запуск
 
@@ -44,10 +45,7 @@ python -m venv venv
 ```bash
 pip install -r requirements.txt
 ```
-4. Ввести свой токен OWM в поле API_KEY:
-```python
-API_KEY = 'key_example_123'
-```
+4. Создать файл `.env` и заполнить его по примеру в `.env.example`:
 5. Запустить программу:
 ```bash
 # Для Linux
