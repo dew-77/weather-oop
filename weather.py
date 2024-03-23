@@ -1,8 +1,14 @@
 from datetime import datetime as dt
 
 import httpx
+from pydantic import ValidationError
 
-from constants import API_KEY, API_URL, FILE_TO_WRITE, UNITS
+from constants import settings
+from exceptions import (
+    IncorrectCityNameException, ServiceAvailabilityException,
+    IncorrectJsonFormatException
+)
+from models import WeatherResponse
 
 
 class Weather:
@@ -11,40 +17,53 @@ class Weather:
     Получает название города и единицу температуры при инициализации.
     """
 
-    def __init__(self, city: str, need_unit: str):
+    def __init__(self, city: str, need_unit: str) -> None:
         self.city = city
         self.need_unit = need_unit
 
     def __get_json(self) -> httpx._models.Response.json:
+        """
+        Получение и валидация данных в формате JSON
+        """
+
         # Формирование URL на основе параметров
-        unit = UNITS[self.need_unit][0]
-        url = API_URL + \
-            f'?q={self.city}&type=like&APPID={API_KEY}&units={unit}'
+        unit = settings.units[self.need_unit][0]
+        params = {
+            'q': self.city, 'type': 'like',
+            'APPID': settings.api_key, 'units': {unit}
+        }
 
         # Запрос через httpx
-        response = httpx.get(url=url)
-        if response.status_code != 200:
-            raise TimeoutError('Service currently unavailable.')
+        try:
+            response = httpx.get(url=settings.api_url, params=params)
+            response.raise_for_status()
+        except httpx._exceptions.HTTPStatusError:
+            raise ServiceAvailabilityException('Service currently unavailable')
 
         return response.json()
 
     def get_weather_info(self) -> str:
-        # Извлечение информации из json'а
         json = self.__get_json()
 
         try:
-            temperature = str(json.get('list')[0].get('main').get('temp')) + \
-                UNITS[self.need_unit][1]
-            pressure = str(json.get('list')[0].get('main').get('pressure')) + \
+            weather_response = WeatherResponse.parse_obj(json)
+        except ValidationError:
+            raise IncorrectJsonFormatException('Incorrect JSON response')
+
+        # Извлечение информации из json
+        try:
+            temperature = str(weather_response.list[0].main.temp) + \
+                settings.units[self.need_unit][1]
+            pressure = str(weather_response.list[0].main.pressure) + \
                 'hPa'
-            wind = str(json.get('list')[0].get('wind').get('speed')) + \
+            wind = str(weather_response.list[0].wind.speed) + \
                 'м/с'
         except IndexError:
-            raise IndexError('Incorrect city name.')
+            raise IncorrectCityNameException('Incorrect city name')
 
         # Формирование ответа
         weather_info = f'{temperature}-{pressure}-{wind}'
-        return f'{self.city}_{dt.now():%d-%m-%Y %H:%M:%S}_{weather_info}'
+        return weather_info
 
 
 class File:
@@ -53,13 +72,12 @@ class File:
     Получает название файла и данные для записи.
     """
 
-    def __init__(self, name: str, data: str):
+    def __init__(self, name: str) -> None:
         self.name = name
-        self.data = data
 
-    def record_to_file(self) -> None:
+    def record_to_file(self, data: str) -> None:
         with open(self.name, 'a') as f:
-            f.write(self.data + '\n')
+            f.write(f'{dt.now():%d-%m-%Y %H:%M:%S} {data} \n')
 
 
 class UserInterface:
@@ -67,28 +85,30 @@ class UserInterface:
     Интерфейс для пользователя.
     """
 
-    def __init__(self, unit: str = 'Celsius'):
-        self.unit = unit
-
-    def __get_city(self):
-        city = input('Type city name: ')
-        return city
+    def __init__(self, city: str, unit: str = 'Celsius') -> None:
+        self.weather = Weather(city=city, need_unit=unit)
+        self.file = File(name=settings.file_to_write)
 
     def get_weather(self) -> None:
-        # Обращение к классам Weather и File + обработка исключений
         try:
-            data = Weather(
-                city=self.__get_city(), need_unit=self.unit
-            ).get_weather_info()
-            print(data)
+            data = f'{self.weather.city} {self.weather.get_weather_info()}'
+            print(
+                f"{self.weather.city} "
+                f"{dt.now():%d-%m-%Y %H:%M:%S} "
+                f"{self.weather.get_weather_info()}"
+            )
 
-        except Exception as error:
+        except (
+            IncorrectCityNameException, ServiceAvailabilityException,
+            IncorrectJsonFormatException
+        ) as error:
             print(error)
-            data = f'[error] {dt.now():%d-%m-%Y %H:%M:%S}: {error}'
+            data = error
 
-        File(name=FILE_TO_WRITE, data=data).record_to_file()
+        self.file.record_to_file(data=data)
 
 
 if __name__ == '__main__':
-    interface = UserInterface()
+    city = input('Type city name: ')
+    interface = UserInterface(city)
     interface.get_weather()
